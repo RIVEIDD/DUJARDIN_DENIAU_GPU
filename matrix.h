@@ -34,4 +34,10 @@ void matrix_scalar(matrix_t *m1, double s, matrix_t *res);
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src);
 
+void apply_sigmoid_gpu(double* input, int size);
+
+void apply_dsigmoid_gpu(const double* z, double* out, int size);
+
+void add_bias_gpu(double* z, const double* biases, int n_rows, int n_cols);
+
 #endif

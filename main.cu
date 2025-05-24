@@ -34,15 +34,15 @@ void shuffle(unsigned *t, const unsigned size, const unsigned number_of_switch)
     }
 }
 
-double sigmoid(double x)
-{
-    return 1 / (1 + exp(-x));
-}
+// double sigmoid(double x)
+// {
+//     return 1 / (1 + exp(-x));
+// }
 
-double dsigmoid(double x)
-{
-    return sigmoid(x)*(1-sigmoid(x));
-}
+// double dsigmoid(double x)
+// {
+//     return sigmoid(x)*(1-sigmoid(x));
+// }
 
 double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned minibatch_size, ann_t *nn)
 {
@@ -71,7 +71,7 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
         
 
 
-        forward(nn, sigmoid);
+        forward(nn);
   
         cudaDeviceSynchronize(); //pour mémoire unifiée
 
@@ -171,9 +171,9 @@ int main(int argc, char *argv[])
         {
             populate_minibatch(x, y, shuffled_idx+i, minibatch_size, train_img, 28*28, train_label, 10);
             memcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double));
-            forward(nn, sigmoid);
+            forward(nn);
             memcpy(out->m, y, 10 * minibatch_size * sizeof(double));            
-            backward(nn, out, dsigmoid);   
+            backward(nn, out);   
             cudaDeviceSynchronize(); //mémoire uhnifiéé         
         }     
         printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));

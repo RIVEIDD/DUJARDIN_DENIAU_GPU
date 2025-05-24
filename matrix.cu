@@ -463,3 +463,66 @@ void matrix_memcpy(matrix_t *dest, const matrix_t *src)
 
     memcpy(dest->m, src->m, src->columns * src->rows * sizeof(double));
 }
+
+/////////////////////// gestion sigmoid ////////////////////////////////////
+
+// Device function – utilisée par le kernel
+__device__ double sigmoid_device(double x) {
+    return 1.0 / (1.0 + exp(-x));
+}
+
+// Kernel – applique sigmoid à chaque case
+__global__ void sigmoidKernel(double* input, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        input[idx] = sigmoid_device(input[idx]);
+    }
+}
+// Wrapper CPU – lance le kernel sur GPU
+void apply_sigmoid_gpu(double* input, int size) {
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    sigmoidKernel<<<blocks, threads>>>(input, size);
+    cudaDeviceSynchronize();  // important en mémoire unifiée
+}
+/////////////////////// gestion dsigmoid ////////////////////////////////////
+// Device function – utilisée par le kernel
+__device__ double dsigmoid_device(double x) {
+    double s = sigmoid_device(x);
+    return s * (1.0 - s);
+}
+
+// Kernel – applique la dérivée de sigmoid à chaque case
+__global__ void dsigmoidKernel(const double* z, double* out, int size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        out[idx] = dsigmoid_device(z[idx]);
+    }
+}
+
+// Wrapper CPU – lance le kernel
+void apply_dsigmoid_gpu(const double* z, double* out, int size) {
+    int threads = 256;
+    int blocks = (size + threads - 1) / threads;
+    dsigmoidKernel<<<blocks, threads>>>(z, out, size);
+    cudaDeviceSynchronize();  // important en mémoire unifiée
+}
+
+///////////////////// gestion matrix de forward
+__global__ void add_bias_kernel(double* z, const double* biases, int n_rows, int n_cols) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = n_rows * n_cols;
+    if (idx < total) {
+        int row = idx / n_cols;
+        z[idx] += biases[row];
+    }
+}
+
+void add_bias_gpu(double* z, const double* biases, int n_rows, int n_cols) {
+    int total = n_rows * n_cols;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+
+    add_bias_kernel<<<blocks, threads>>>(z, biases, n_rows, n_cols);
+    cudaDeviceSynchronize();
+}
