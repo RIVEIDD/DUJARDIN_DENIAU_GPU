@@ -46,19 +46,35 @@ double dsigmoid(double x)
 
 double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned minibatch_size, ann_t *nn)
 {
+
     unsigned good = 0;
     unsigned idx[datasize];    
-    double *x = (double *) malloc( 28 * 28 * minibatch_size * sizeof(double));
-    double *y = (double *) malloc( 10 * minibatch_size * sizeof(double) );
+    //double *x = (double *) malloc( 28 * 28 * minibatch_size * sizeof(double));
+    //double *y = (double *) malloc( 10 * minibatch_size * sizeof(double) );
+
+    double *x, *y;
+
+
+
+    cudaMallocManaged(&x, 28 * 28 * minibatch_size * sizeof(double));
+    cudaMallocManaged(&y, 10 * minibatch_size * sizeof(double));
 
     zero_to_n(datasize, idx);
+
+
     
     for (int i = 0; i < datasize - minibatch_size; i+= minibatch_size)
     {        
         populate_minibatch(x, y, &idx[i], minibatch_size, test_img, 28*28, test_label, 10);
+
         memcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double));     
         
+
+
         forward(nn, sigmoid);
+  
+        cudaDeviceSynchronize(); //pour mémoire unifiée
+
         for (int col = 0; col < minibatch_size; col ++)
         {
             int idxTrainingData = col + i ;
@@ -77,11 +93,12 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
             }
         }
     }    
-    free(x);
-    free(y);
+    //free(x);
+    //free(y);
 
     unsigned ntests = (datasize/minibatch_size) * minibatch_size;
     return (100.0* (double) (good) / ntests );
+
 }
 
 void populate_minibatch(double * x, double * y, unsigned * minibatch_idx, unsigned minibatch_size, image * img, unsigned img_size, byte* label, unsigned label_size)
@@ -104,6 +121,7 @@ void populate_minibatch(double * x, double * y, unsigned * minibatch_idx, unsign
 
 int main(int argc, char *argv[])
 {
+
     srand(time(0));
     unsigned datasize, ntest;
     image* train_img = read_images("train-images-idx3-ubyte", &datasize);
@@ -113,18 +131,35 @@ int main(int argc, char *argv[])
 
     ann_t * nn;
     double alpha = 0.05;
-    unsigned minibatch_size = 16;
+    unsigned minibatch_size = 16;//16 //32
     unsigned number_of_layers = 3;
     unsigned nneurons_per_layer[3] = {28*28, 30, 10};
     nn = create_ann(alpha, minibatch_size, number_of_layers, nneurons_per_layer);
     //print_nn(nn);
 
+    if (!nn || !nn->layers[0] || !nn->layers[0]->activations || !nn->layers[0]->activations->m) {
+        fprintf(stderr, "Problème d'allocation dans create_ann (nn ou activations null)\n");
+        return 1;
+    }
+
+
     printf("starting accuracy %lf\n", accuracy(test_img, test_label, ntest, minibatch_size, nn));
 
+
     unsigned *shuffled_idx = (unsigned *)malloc(datasize*sizeof(unsigned));
-    double *x = (double *) malloc(28*28 * minibatch_size * sizeof( double ));
-    double *y = (double *) malloc(10 * minibatch_size * sizeof( double ));
+    //double *x = (double *) malloc(28*28 * minibatch_size * sizeof( double ));
+    //double *y = (double *) malloc(10 * minibatch_size * sizeof( double ));
+    double *x, *y;
+
+    cudaMallocManaged(&x, 28*28 * minibatch_size * sizeof(double));
+    cudaMallocManaged(&y, 10 * minibatch_size * sizeof(double));
+
     matrix_t *out = alloc_matrix(10, minibatch_size);
+
+    if (!out) {
+    fprintf(stderr, "alloc_matrix pour out a échoué\n");
+    return 1;
+}
     
     for (int epoch = 0; epoch < 1; epoch ++)
     {
@@ -138,15 +173,18 @@ int main(int argc, char *argv[])
             memcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double));
             forward(nn, sigmoid);
             memcpy(out->m, y, 10 * minibatch_size * sizeof(double));            
-            backward(nn, out, dsigmoid);            
+            backward(nn, out, dsigmoid);   
+            cudaDeviceSynchronize(); //mémoire uhnifiéé         
         }     
         printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));
     }
 
-    free(x);
-    free(y);
+    //free(x);
+    //free(y);
+    cudaFree(x);
+    cudaFree(y);
     free(shuffled_idx);
-    destroy_matrix(out);   
+    destroy_matrix(out); 
     
     return 0;
 }

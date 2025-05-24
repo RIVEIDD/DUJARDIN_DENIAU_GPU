@@ -26,7 +26,7 @@ __global__ void matrixSumKernel(const double* A, const double* B, double* C, int
 
 
 
-matrix_t *alloc_matrix(unsigned rows, unsigned columns)
+/*matrix_t *alloc_matrix(unsigned rows, unsigned columns)
 {
     matrix_t *res = (matrix_t *)malloc(sizeof(matrix_t));
     res->m = (double *)calloc(columns * rows, sizeof(double));
@@ -40,9 +40,44 @@ void destroy_matrix(matrix_t *m)
     // printf("free %p %p\n", m, m->m);
     free(m->m);
     free(m);
+}*/
+
+/***
+ *  vv mémoire unifiée vv
+ */
+
+matrix_t* alloc_matrix(unsigned rows, unsigned cols) {
+    matrix_t* mat;
+    size_t total = rows * cols * sizeof(double);
+    
+    cudaError_t err = cudaMallocManaged(&mat, sizeof(matrix_t));
+    if (err != cudaSuccess) {
+        printf("❌ alloc_matrix struct failed: %s\n", cudaGetErrorString(err));
+        fflush(stdout);
+        return NULL;
+    }
+    err = cudaMallocManaged(&(mat->m), total);
+    if (err != cudaSuccess) {
+        printf("❌ alloc_matrix m failed: %s\n", cudaGetErrorString(err));
+        fflush(stdout);
+        cudaFree(mat);
+        return NULL;
+    }
+
+    mat->rows = rows;
+    mat->columns = cols;
+    return mat;
 }
 
+void destroy_matrix(matrix_t* mat) {
 
+    // libère la matrice
+    cudaFree(mat->m);
+    cudaFree(mat);
+}
+/***
+ *  ^^ mémoire unifiée ^^
+ */
 
 void print_matrix(matrix_t *m, bool is_short)
 {
@@ -102,30 +137,30 @@ void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
 
 void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res){
     int size = m1->rows * m1->columns;
-    double *d_A, *d_B, *d_C;
+    //double *d_A, *d_B, *d_C;
 
      // Allocation sur le GPU
-    cudaMalloc(&d_A, size * sizeof(double));
-    cudaMalloc(&d_B, size * sizeof(double));
-    cudaMalloc(&d_C, size * sizeof(double));
+    //cudaMalloc(&d_A, size * sizeof(double));
+    //cudaMalloc(&d_B, size * sizeof(double));
+    //cudaMalloc(&d_C, size * sizeof(double));
 
     // Copier A et B vers la mémoire GPU
-    cudaMemcpy(d_A, m1->m, size * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, m2->m, size * sizeof(double), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_A, m1->m, size * sizeof(double), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_B, m2->m, size * sizeof(double), cudaMemcpyHostToDevice);
 
     // Définir combien de threads et de blocs on veut
     int threads = 256;
     int blocks = (size + threads - 1) / threads;
 
     // Lancer le kernel
-    matrixSumKernel<<<blocks, threads>>>(d_A, d_B, d_C, size);
+    matrixSumKernel<<<blocks, threads>>>(m1->m, m2->m, res->m, size);
     cudaDeviceSynchronize();
 
     // Copier le résultat de C vers res
-    cudaMemcpy(res->m, d_C, size * sizeof(double), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(res->m, d_C, size * sizeof(double), cudaMemcpyDeviceToHost);
 
     // Libération de la mémoire GPU
-    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+    //cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
 }
 
 /*void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -143,30 +178,30 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res){
 
 void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res) {
     int size = m1->rows * m1->columns;
-    double *d_A, *d_B, *d_C;
+    //double *d_A, *d_B, *d_C;
 
      // Allocation sur le GPU
-    cudaMalloc(&d_A, size * sizeof(double));
-    cudaMalloc(&d_B, size * sizeof(double));
-    cudaMalloc(&d_C, size * sizeof(double));
+    //cudaMalloc(&d_A, size * sizeof(double));
+    //cudaMalloc(&d_B, size * sizeof(double));
+    //cudaMalloc(&d_C, size * sizeof(double));
 
     // Copier A et B vers la mémoire GPU
-    cudaMemcpy(d_A, m1->m, size * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, m2->m, size * sizeof(double), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_A, m1->m, size * sizeof(double), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_B, m2->m, size * sizeof(double), cudaMemcpyHostToDevice);
 
     // Définir combien de threads et de blocs on veut
     int threads = 256;
     int blocks = (size + threads - 1) / threads;
 
     // Lancer le kernel
-    matrixMinusKernel<<<blocks, threads>>>(d_A, d_B, d_C, size);
+    matrixMinusKernel<<<blocks, threads>>>(m1->m, m2->m, res->m, size);
     cudaDeviceSynchronize();
 
     // Copier le résultat de C vers res
-    cudaMemcpy(res->m, d_C, size * sizeof(double), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(res->m, d_C, size * sizeof(double), cudaMemcpyDeviceToHost);
 
     // Libération de la mémoire GPU
-    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+    //cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
 }
 
 /**
@@ -216,7 +251,7 @@ __global__ void matrix_dot_kernel(const double *m1, const double *m2, double *re
     }
 }
 
-void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
+/*void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
     assert((m1->columns == m2->rows) &&
            (m1->rows == res->rows) &&
@@ -251,7 +286,35 @@ void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
     cudaFree(d_m1);
     cudaFree(d_m2);
     cudaFree(d_res);
+}*/
+
+/***
+*
+*   vv mémoire unifiée vv
+*
+ */
+
+ void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
+{
+    assert((m1->columns == m2->rows) &&
+           (m1->rows == res->rows) &&
+           (m2->columns == res->columns));
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((res->columns + 15) / 16,
+                       (res->rows + 15) / 16);
+
+    matrix_dot_kernel<<<blocksPerGrid, threadsPerBlock>>>(
+        m1->m, m2->m, res->m, m1->rows, m1->columns, m2->columns);
+
+    cudaDeviceSynchronize();  // synchronisation 
 }
+
+/***
+*
+*   ^^ mémoire unifiée ^^
+*
+ */
 
 /*
 
@@ -373,23 +436,24 @@ void matrix_transpose(matrix_t *m1, matrix_t *res)
 void matrix_scalar(matrix_t *m1, double scalar, matrix_t *res)
 {
     int size = m1->rows * m1->columns;
-    size_t bytes = size * sizeof(double);
+    //size_t bytes = size * sizeof(double);
 
-    double *d_A, *d_C;
-    cudaMalloc(&d_A, bytes);
-    cudaMalloc(&d_C, bytes);
+    //double *d_A, *d_C;
+    //cudaMalloc(&d_A, bytes);
+    //cudaMalloc(&d_C, bytes);
 
-    cudaMemcpy(d_A, m1->m, bytes, cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_A, m1->m, bytes, cudaMemcpyHostToDevice);
 
     int threads = 256;
     int blocks = (size + threads - 1) / threads;
-    matrixScalarKernel<<<blocks, threads>>>(d_A, scalar, d_C, size);
+    //matrixScalarKernel<<<blocks, threads>>>(d_A, scalar, d_C, size);
+    matrixScalarKernel<<<blocks, threads>>>(m1->m, scalar, res->m, size);
     cudaDeviceSynchronize();
 
-    cudaMemcpy(res->m, d_C, bytes, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(res->m, d_C, bytes, cudaMemcpyDeviceToHost);
 
-    cudaFree(d_A);
-    cudaFree(d_C);
+    //cudaFree(d_A);
+    //cudaFree(d_C);
 }
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src)

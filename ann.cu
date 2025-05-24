@@ -71,10 +71,15 @@ layer_t * create_layer(unsigned layer_number, unsigned number_of_neurons, unsign
     layer->number_of_neurons = number_of_neurons;
     layer->minibatch_size = minibatch_size;    
     layer->activations = alloc_matrix(number_of_neurons, minibatch_size);
+    if (!layer->activations) { fprintf(stderr, "alloc_matrix failed: activations\n"); exit(1); }
     layer->z = alloc_matrix(number_of_neurons, minibatch_size);
+    if (!layer->z) { fprintf(stderr, "alloc_matrix failed: z\n"); exit(1); }
     layer->delta = alloc_matrix(number_of_neurons, minibatch_size);
-    layer->weights = alloc_matrix(number_of_neurons, nneurons_previous_layer);    
+    if (!layer->delta) { fprintf(stderr, "alloc_matrix failed: delta\n"); exit(1); }
+    layer->weights = alloc_matrix(number_of_neurons, nneurons_previous_layer); 
+    if (!layer->weights) { fprintf(stderr,  "alloc_matrix failed: weights\n"); exit(1); }   
     layer->biases = alloc_matrix(number_of_neurons, 1);
+    if (!layer->biases) { fprintf(stderr, "alloc_matrix failed: biases\n"); exit(1); }
 
     if (layer_number > 0)
     {
@@ -119,19 +124,31 @@ void print_nn(ann_t *nn)
 
 void forward(ann_t *nn, double (*activation_function)(double))
 {
+    
+    
     for (int l = 1; l < nn->number_of_layers; l++)
     {
+
         matrix_t *z1 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
         matrix_t *z2 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
         matrix_t *one = alloc_matrix(1, nn->minibatch_size);
+        if (!one) {
+            fprintf(stderr, "❌ allocation one failed\n");
+            exit(1);
+        }
+        if (!one->m) {
+            fprintf(stderr, "❌ one->m == NULL\n");
+            exit(1);
+        }
+
         for (int idx = 0; idx < one->columns*one->rows; idx++)
             one->m[idx] = 1.0;
-
         matrix_dot(nn->layers[l]->weights, nn->layers[l-1]->activations, z1); // z1 <- w^l x a^(l-1)
-        matrix_dot(nn->layers[l]->biases, one, z2); // z2 <- b^l x 1        
-        matrix_sum(z1, z2, nn->layers[l]->z); // z^l <- z1 + z2 <=> z^l <- w^l x a^(l-1) + b^l x 1      
+        matrix_dot(nn->layers[l]->biases, one, z2); // z2 <- b^l x 1  
+        matrix_sum(z1, z2, nn->layers[l]->z); // z^l <- z1 + z2 <=> z^l <- w^l x a^(l-1) + b^l x 1  
 
         matrix_function(nn->layers[l]->z, activation_function, nn->layers[l]->activations); // a^l = f(z^l)
+        cudaDeviceSynchronize(); //mémoire unifiée
      
         destroy_matrix(z1);
         destroy_matrix(z2);
